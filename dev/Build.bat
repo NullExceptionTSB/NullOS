@@ -6,8 +6,8 @@ color a
 echo BUILD START
 echo ==========
 C:\Users\NullException\Desktop\Treash\NASM\nasm.exe -f bin bootloader.asm -o nsab.bin
-C:\Users\NullException\Desktop\Treash\NASM\nasm.exe -f bin kernelloader.asm -o krnlldr.sys
-C:\Users\NullException\Desktop\Treash\NASM\nasm.exe -f bin fat12.asm -o fat12drv.sys
+rem C:\Users\NullException\Desktop\Treash\NASM\nasm.exe -f bin kernelloader.asm -o krnlldr.sys UNUSED
+rem C:\Users\NullException\Desktop\Treash\NASM\nasm.exe -f bin fat12.asm -o fat12drv.sys UNUSED
 echo Bootloader built succesfuly
 echo ========
 echo BUILD END
