@@ -21,7 +21,7 @@ Reserved               db 0
 Signature              db 0x29         ;drive signature, 41d = floppy
 SerialNumber           dd 0xDEADBEEF   ;disk serial, little endian for DEADBEEF
 VolumeLabel            db "SOAREOS    "
-FileSystem             db "FAT12   "    
+FileSystem             db "FAT16   "    
 
 
 Main:
@@ -49,6 +49,7 @@ mul WORD [RootDirEntryCount]
 div WORD [BytesPerSector]
 xor dx, dx
 mov cx, ax
+mov [rootdirsize], cx
 ;calculate offset of root directory from sector 1 into AX (in LBA)
 mov al, [FATCount]
 mul WORD [SectorsPerFAT]
@@ -99,7 +100,7 @@ call LoadSectors
 ;this is an absolute horribly doccumented nightmare,
 ;prepare registers to load SoareLDR
 ;at this point it's midnight and i want to get this over with so i'm effectively just copypasting from brokenthorn
-mov ax, 0x00100
+mov ax, 0x00010
 mov es, ax
 xor bx, bx
 mov ax, [cluster]
@@ -108,52 +109,37 @@ mov ax, [cluster]
 ;ok we loaded it using fairy powder
 ;note to self: AVOID FAT12, USE FAT16
 ;now we will pull an "it was all a subroutine"
+;or not, just do a long jump
 
 ;through the loop we go!
 loadclusters:
     ;load the cluster into the destination buffer
+    mov si, msg
     call LoadCluster 
-
+    jc FAILURE
     ;increment the buffer index by the ammount of bytes a cluster allocates (sectors per cluster * 512)
-    push dx
-    xor ax, ax
-    mov al, [SectorsPerCluster]
-    mov dx, 512
-    mul dx
-    pop dx
+    mov dx, [SectorsPerCluster]
+    shr dx, 9
+    add bx, dx
 
-    add bx, ax
-    ;check if cluster is eof, if yes, don't continue
-    mov ax, [cluster]
+    ;get the next cluster
     mov di, ax
-    shr ax, 1
-    add di, ax
-    add di, 0x2000
-    mov ax, [cs:di]
-    ;adjust for 12 bits, so check if the cluster is odd or even and mask appropriately
-    mov cx, [cluster]
-    and cx, 1
-    jnz .ODDCLUSTER
-    .EVENCLUSTER:
-    and ax, 0x0FFF
-    jmp .EofCheck
-    .ODDCLUSTER:
-    shr ax, 4
-    .EofCheck: ;actual eof check
-    cmp ax, 0x0FF7
-    jge postload
-    ;compute the next cluster
-    mov di, ax
-    mov ax, [cs:di]
-    mov [cluster], ax
-    jmp loadclusters
+    push es
+    mov ax, 0x2000
+    mov es, ax
+    mov ax, [es:di]
+    pop es
+
+    cmp ax, 0xFFF8
+    jl loadclusters
+
 postload:
-;mov si, msg
+
+mov si, msg4
 call Print
-push 0x0100
-push 0
-retf
-    
+
+jmp long 0x100
+
 %include 'stage1/disk.asm' 
 
 FAILURE:
@@ -176,13 +162,15 @@ Print:
 halt: jmp $
 msg db "Loading:",0Dh, 0Ah, 0
 msg2 db "I:Staging",0Dh,0Ah,0
-msg3 db "I:Found SOARELDR",0
+msg3 db "I:Found SOARELDR",0Dh, 0Ah, 0
+msg4 db "I:Jumping to SOARELDR",0
 err db "F:Hatling",0
 filename db "SOARELDRSYS"
 
 diskdataaddress dw 0
 claddr dw 0
 cluster dw 0
+rootdirsize dw 0
 
 times 510-($-$$) db 0
 dw 0xAA55   

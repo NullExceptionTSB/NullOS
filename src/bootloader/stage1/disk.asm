@@ -76,19 +76,13 @@ mov WORD [actually_read], cx
 LoadCluster:
 pusha
 sub ax, 2
-mov dx, [SectorsPerCluster]
-mul dx
-push ax
-mov ax, [SectorsPerFAT]
-movzx dx, BYTE [FATCount]
-mul dx
+;now, nobody bothered to tell me this but the fucking shit's base address is after the root directory. on one hand
+;i'm stupid for not realising it myself, on the other, fuck you.
 add ax, [ReservedSectors]
-mov dx, ax
-pop ax
-add ax, dx
+add ax, 18 ;size of both FATs
+add ax, [rootdirsize]
 mov dl, [BootDriveNum]
-xor cx, cx
-mov cl, BYTE [SectorsPerCluster]
+movzx cx, BYTE [SectorsPerCluster]
 call LoadSectors
 popa
 ret
