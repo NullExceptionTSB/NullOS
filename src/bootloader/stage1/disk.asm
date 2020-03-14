@@ -78,11 +78,9 @@ pusha
 sub ax, 2
 ;now, nobody bothered to tell me this but the fucking shit's base address is after the root directory. on one hand
 ;i'm stupid for not realising it myself, on the other, fuck you.
-add ax, [ReservedSectors]
-add ax, 18 ;size of both FATs
-add ax, [rootdirsize]
+add ax, [DiskDataStartLBA]
 mov dl, [BootDriveNum]
-movzx cx, BYTE [SectorsPerCluster]
+movzx cx, BYTE [SectorsPerCluster] 
 call LoadSectors
 popa
 ret

@@ -1,9 +1,9 @@
 bits 16
-org 0x7c00  
+org 0x7C00  
 jmp short Main
 nop
 times 3-($-$$) dd 0
-OEMLabel               db "SOAREOS "
+OEMLabel               db "SOARE   "
 BytesPerSector         dw 512d        
 SectorsPerCluster      db 1             
 ReservedSectors        dw 1             ;dw 4  WILL NOT WORK! THERE WILL NOT BE ENOUGH SPACE FOR 224 ROOT ENTRIES!
@@ -11,7 +11,7 @@ FATCount               db 2             ;number of FATs
 RootDirEntryCount      dw 224           ;ammount of maximum root directory entries
 TotalSectors           dw 2880          
 MediaType              db 0xF0          ;media descriptor byte
-SectorsPerFAT          dw 9             
+SectorsPerFAT          dw 9          
 SectorsPerTrack        dw 18             
 HeadCount              dw 2             ;number of r/w heads
 HiddenSectorCount      dd 0             ;number of hidden sectors
@@ -20,133 +20,118 @@ BootDriveNum           db 0             ;drive which holds the boot sector
 Reserved               db 0
 Signature              db 0x29         ;drive signature, 41d = floppy
 SerialNumber           dd 0xDEADBEEF   ;disk serial, little endian for DEADBEEF
-VolumeLabel            db "SOAREOS    "
-FileSystem             db "FAT16   "    
-
+VolumeLabel            db "NOOLOSSOARE"
+FileSystem             db "FAT12   "    
 
 Main:
-;print welcome message
-mov ax, 2
-int 10h
-mov si, msg
-call Print
-;reset floppy drive
-
-ResetFloppy:
-clc
-xor ah, ah
-mov dl, BYTE [BootDriveNum]
-int 13h
-;jc ResetFloppy
-mov si, msg2
-;pusha
-call Print
-;popa
-
-;calculate length of root directory in sectors into CX
-mov ax, 32
-mul WORD [RootDirEntryCount]
-div WORD [BytesPerSector]
-xor dx, dx
-mov cx, ax
-mov [rootdirsize], cx
-;calculate offset of root directory from sector 1 into AX (in LBA)
-mov al, [FATCount]
-mul WORD [SectorsPerFAT]
-add ax, WORD [ReservedSectors]
-xor dx, dx
-;prepare to read root directory into 7C00:2000
-mov bx, 0x2000
-mov dl, [BootDriveNum]
-call LoadSectors
-jc FAILURE
-;woo, we read it, now find the file a$$hole
-mov cx, WORD [RootDirEntryCount]
-mov di, 0x2000
-NameCompare:
+;clear screen
+    mov ax, 2
+    int 10h
+;print message 1
+    mov si, msg
+    call Print
+;reset floppy
+    xor ax, ax
+    mov dl, BYTE [BootDriveNum]
+    int 13h
+;prepare buffer
+    mov ax, 0x07E0
+    mov es, ax
+    xor bx, bx
+;start loading root directory
+;calculate size of root cirectory in sectors
+    mov ax, 32 ;32 bytes per entry
+    mul WORD [RootDirEntryCount] ;times the number of entries
+    div WORD [BytesPerSector] ;divided by the ammount of bytes per sector
+    xor dx, dx
+    mov cx, ax 
+;calculate the start of the root directory in LBA (converted to CHS in disk.asm)
+    movzx ax, BYTE [FATCount]
+    mul WORD [SectorsPerFAT]
+    add ax, WORD [ReservedSectors]
+    ;save this value for later
+    mov dx, cx
+    add dx, ax
+    mov [DiskDataStartLBA], dx
+;load root dir into 07E0:0000 (0x7E00) from boot disk, buffer set above
+    movzx dx, BYTE [BootDriveNum]
+    call LoadSectors ;disk.asm
+    jc HALT
+;let's find the file
+    FindFile:
     push cx
-    mov cx, 11
+    mov cx, 11 ;length of FAT12 file names
     mov si, filename
     push di
     rep cmpsb
     pop di
-    je MatchFound
+    je FileFound
     pop cx
     add di, 32
-    loop NameCompare
-    jmp FAILURE
-
-MatchFound:
-    mov dx, [di + 0x1A]
-    mov [cluster], dx
+    loop FindFile
+    jmp HALT
+    FileFound:
+    mov si, msg2
+    call Print
+;found the file, store the starting cluster
+    mov dx, WORD [es:di + 26]
+    mov [startingCluster], dx
+;size of ONE fat, the second FAT is a copy of the first so it doesn't matter
+    mov cx, [SectorsPerFAT]
+    xor ax, ax
+;start right after reserved sectors
+    add ax, [ReservedSectors]
+    xor bx, bx ;buffer is STILL @ 0x7E00
+    movzx dx, BYTE [BootDriveNum]
+    call LoadSectors
+    jc HALT
+;calculate how many bytes there are per cluster
+    movzx ax, BYTE [SectorsPerCluster]
+    mul WORD [BytesPerSector]
+    mov [BytesPerCluster], ax
+    xor dx, dx
+;now the hard part, using FAT12. i'll preface this by saying FUCK FAT12
+;start by setting the buffer to 0x500, the place SOARELDR expects to be loaded
+    mov ax, 0x050
+    mov es, ax
+    mov ax, WORD [startingCluster]
+;*sigh*
+LoadClusters:
+    call LoadCluster
+;get next cluster
+;test if it's odd or even
+    mov cx, ax
+    mov di, ax
+    shr di, 1
+    add di, cx
+    push es
+    mov cx, 0x7E0
+    mov es, cx
+    mov dx, [es:di]
+    pop es
+    
+    test ax, 1
+    jnz .OddCluster
+    .EvenCluster:
+    and dx, 0x0FFF
+    jmp .PostOddEven
+    
+    .OddCluster:
+    shr dx, 4
+    
+    .PostOddEven:
+;increment buffer offset
+    add bx, [BytesPerCluster]
+;prepare for next iteration
+    mov ax, dx
+    cmp dx, 0x0FF0
+    jb LoadClusters
+;SOARELDR loaded @ 0x0000:0x0500, print message and jump
     mov si, msg3
     call Print
-
-;ok we found the file and stored the starting cluster number in DX
-;let's find it in the FAT
-;first get the size of the FATs and store it in CX
-xor ax, ax
-mov al, [FATCount]
-mul WORD [SectorsPerFAT]
-mov cx, ax
-xor dx, dx
-;make it skip over all reserved sectors, including the bootsector
-;and load the FATs into the same buffer as before
-mov ax, [ReservedSectors]
-mov [diskdataaddress], ax
-mov bx, 0x2000
-call LoadSectors
-;load the clusters and shit
-;this is an absolute horribly doccumented nightmare,
-;prepare registers to load SoareLDR
-;at this point it's midnight and i want to get this over with so i'm effectively just copypasting from brokenthorn
-mov ax, 0x00010
-mov es, ax
-xor bx, bx
-mov ax, [cluster]
-
-
-;ok we loaded it using fairy powder
-;note to self: AVOID FAT12, USE FAT16
-;now we will pull an "it was all a subroutine"
-;or not, just do a long jump
-
-;through the loop we go!
-loadclusters:
-    ;load the cluster into the destination buffer
-    mov si, msg
-    call LoadCluster 
-    jc FAILURE
-    ;increment the buffer index by the ammount of bytes a cluster allocates (sectors per cluster * 512)
-    mov dx, [SectorsPerCluster]
-    shr dx, 9
-    add bx, dx
-
-    ;get the next cluster
-    mov di, ax
-    push es
-    mov ax, 0x2000
-    mov es, ax
-    mov ax, [es:di]
-    pop es
-
-    cmp ax, 0xFFF8
-    jl loadclusters
-
-postload:
-
-mov si, msg4
-call Print
-
-jmp long 0x100
+    jmp 0x0500
 
 %include 'stage1/disk.asm' 
-
-FAILURE:
-    mov si, err
-    call Print
-    jmp halt
-
 Print:
     lodsb
     or al, al   
@@ -157,22 +142,21 @@ Print:
         .printEnd:
         ret
 
+;halt at end of code
+HALT:
+    mov si, err
+    call Print
+    cli
+    hlt
+;Data
+msg db "Welcome to NoolOS-SOARE",0xA,0xD,0
+msg2 db "Found SOARELDR",0xA,0xD,0
+msg3 db "Loaded SOARELDR, Staging",0
+err db "E: System halted",0
 
-
-halt: jmp $
-msg db "Loading:",0Dh, 0Ah, 0
-msg2 db "I:Staging",0Dh,0Ah,0
-msg3 db "I:Found SOARELDR",0Dh, 0Ah, 0
-msg4 db "I:Jumping to SOARELDR",0
-err db "F:Hatling",0
+startingCluster dw 0
 filename db "SOARELDRSYS"
-
-diskdataaddress dw 0
-claddr dw 0
-cluster dw 0
-rootdirsize dw 0
-
+DiskDataStartLBA dw 0
+BytesPerCluster dw 0
 times 510-($-$$) db 0
-dw 0xAA55   
-
-
+dw 0xAA55
