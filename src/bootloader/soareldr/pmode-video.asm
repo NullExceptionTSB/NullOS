@@ -2,6 +2,7 @@
 %DEFINE LINES 25
 %DEFINE VIDEOMEMORY 0x000B8000
 %DEFINE DEFAULT_ATTRIB 07h
+
 ;AL=character
 ;AH=attribs
 ;CX=X
@@ -52,6 +53,21 @@ Sld32SetCursorPos:
     mov al, ch
     mov dx, 0x03D5
     out dx, al
+    popa
+    ret
+
+;AH=attribs
+Sld32ClearScreen:
+    pusha
+    mov WORD [CursorPosX], 0
+    mov WORD [CursorPosY], 0
+    xor cx, cx
+    xor dx, dx
+    call Sld32SetCursorPos
+    xor al, al
+    mov edi, VIDEOMEMORY
+    mov cx, 0x2000
+    rep stosw
     popa
     ret
 

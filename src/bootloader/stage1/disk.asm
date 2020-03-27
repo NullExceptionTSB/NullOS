@@ -1,5 +1,5 @@
-%ifndef SOARE_STAGE1_DISK
-%define SOARE_STAGE1_DISK
+%ifndef _SOARE_DISK_ASM
+%define _SOARE_DISK_ASM
 CHS_cylinders db 0
 CHS_heads db 0
 CHS_sectors db 0
@@ -50,25 +50,19 @@ ret
 ;ES:BX = buffer segment:offset
 ;OUT:
 ;CF = 1 if error
-;CX = sectors actually read
 
-actually_read dw 0
 LoadSectors:
 pusha
-mov WORD [actually_read], cx
     .readLoop:
     clc
     call LoadSector
     inc ax
     add bx, 512
-    jc .failed
+    jc .done
     loop .readLoop
     jmp .done
-    .failed:
-    sub [actually_read], cx
     .done:
     popa
-    mov cx, [actually_read]
     ret
 
 ;AX = cluster
@@ -84,4 +78,4 @@ movzx cx, BYTE [SectorsPerCluster]
 call LoadSectors
 popa
 ret
-%endif 
+%endif
