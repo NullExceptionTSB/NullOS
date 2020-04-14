@@ -29,7 +29,7 @@ Sld32Putchar:
 ;DX=Y
 Sld32SetCursorPos:
     pusha
-    ;first calculate the x+(x*W) offset
+    ;first calculate the x+(y*W) offset
     mov ax, dx
     xor dx, dx
     mov bx, COLUMNS
@@ -59,6 +59,10 @@ Sld32SetCursorPos:
 ;AH=attribs
 Sld32ClearScreen:
     pusha
+    test ah, 0
+    jnz .nonzero
+    mov ah, DEFAULT_ATTRIB
+    .nonzero:
     mov WORD [CursorPosX], 0
     mov WORD [CursorPosY], 0
     xor cx, cx

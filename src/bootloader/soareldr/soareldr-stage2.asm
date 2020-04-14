@@ -1,17 +1,12 @@
-;This will be a COM program but is currently not segmented
-;this won't be a com program and will use a custom format
-;actually this will just be a flat binary forever to make things easier
 %define ROOT_DIRECTORY_SEGMENT 0x800
 %define FAT_SEGMENT 0x4000
-
+%define FILESIZESTORAGE_SEGMENT 0x9F00
 
 org 0x500
 bits 16
 
 SldEntry:
 mov si, prepkrnl
-call SldPrint16
-mov si, shineon
 call SldPrint16
 ;load kernel
 ;memcpy BPB from stage 1
@@ -56,20 +51,26 @@ pop dx
 push es
 call SldLoadRootDirectory
 call SldLoadFAT
-
 pop es
 push ds
 xor bx, bx
 
-push es
-
-;NOOLKRNL.SYS -> 0x80000
+;NULLKRNL.SYS -> 0x80000
 mov ax, 0x8000
 mov es, ax
-mov si, fn_NOOLKRNL
+mov si, fn_NULLKRNL
+call SldPrint_LoadingFile
 call SldLoadFile
 jc SldPrint_FileLoadFailed
-
+clc
+;HAL.SYS -> 0x60000
+mov ax, 0x6000
+mov es, ax
+mov si, fn_HAL
+call SldPrint_LoadingFile
+call SldLoadFile
+jc SldPrint_FileLoadFailed
+clc
 ;set up the GDT
 cli
 pusha
@@ -83,12 +84,36 @@ mov cr0, eax
 jmp 0x08:Sld32Entry
 jmp SldHalt
 
+SldPrint_LoadingFile:
+    push si
+    mov si, loadingfile
+    call SldPrint16
+    pop si
+    call SldPrintFilename
+    ret
+
 SldPrint_FileLoadFailed:
     push si
     mov si, failedtoload
     call SldPrint16
     pop si
+    call SldPrintFilename
+    jmp SldHalt
+
+SldPrintFilename:
+    pusha
+    push si
+    add si, 7
     mov cx, 8
+    .RemovePadding:
+    mov al, [si]
+    cmp al, 0x20
+    jne .PostRemovePadding
+    dec si
+    loop .RemovePadding
+    .PostRemovePadding:
+    pop si
+    push cx
     mov ah, 0Eh
     .PrintFilename:
     mov al, BYTE [si]
@@ -96,6 +121,9 @@ SldPrint_FileLoadFailed:
     inc si
     loop .PrintFilename
     jc .PostExtension
+    pop cx
+    sub si, cx
+    add si, 8
     mov al, 2eh
     int 10h
     mov cx, 3
@@ -106,7 +134,9 @@ SldPrint_FileLoadFailed:
     int 10h
     mov al, 0Dh
     int 10h
-    jmp SldHalt
+    clc
+    popa
+    ret
 
 SldPrint16:
     lodsb
@@ -184,8 +214,7 @@ pusha
 SldLoadCluster:
 pusha
 sub ax, 2
-;now, nobody bothered to tell me this but the fucking shit's base address is after the root directory. on one hand
-;i'm stupid for not realising it myself, on the other, fuck you.
+;if you're having trouble loading clusters, chances are, this is why
 add ax, [DiskDataStartLBA]
 mov dl, [BootDriveNum]
 movzx cx, BYTE [SectorsPerCluster] 
@@ -271,12 +300,28 @@ SldLoadFile:
     stc
     ret
     .FileFound:
+    push es
+    push si
+    mov eax, DWORD [es:di + 28]
+    mov cx, FILESIZESTORAGE_SEGMENT
+    mov es, cx
+    mov si, [FileSizeListIndex]
+    shl si, 2 ; * 4 bytes
+    mov DWORD [es:si], eax
+    mov si, WORD [FileSizeListIndex]
+    inc si
+    mov WORD [FileSizeListIndex], si
+    pop si
+    pop es
+    xor eax, eax
     mov ax, WORD [es:di + 26]
     pop es    
     xor cx, cx
     movzx cx, BYTE [SectorsPerCluster]
     .LoadFileL:
     call SldLoadCluster
+
+    
     mov cx, ax
     mov di, ax
     shr di, 1
@@ -313,15 +358,17 @@ BPBJMP db 0,0,0
 %include 'bootloader/stage1/bpb.asm'
 DiskDataStartLBA dw 0
 BytesPerCluster dw 0
+FileSizeListIndex dw 0
 CHS_cylinders db 0
 CHS_heads db 0
 CHS_sectors db 0
+;filenames
+fn_NULLKRNL db "NULLKRNLSYE"
+fn_HAL      db "HAL     SYS"
 ;strings
-fn_NOOLKRNL db "NOOLKRNLSYS"
-
-shineon db "Remember when you were young, you shone like the sun. Shine on you crazy diamond", 0
 prepkrnl db 0xA,0xD,0
 failedtoload db "Error: Failed to load ",0
+loadingfile db "Loading file ",0
 haltmsg db "Halting system...", 0
 ;other data
 __GDTDATA:
@@ -348,12 +395,17 @@ dw __GDTDATAEND - __GDTDATA - 1
 dd __GDTDATA
 
 BITS 32
+
+%define DST_KERNEL_ADDRESS  0x80000
+%define KERNEL_IMAGE_BASE   0x100000
+%define DST_HAL_ADDRESS     0x1000000
 Sld32Entry:
     mov ax, 0x10
     mov ds, ax
     mov ss, ax
     mov es, ax
-    mov esp, 0xA0000
+    mov esp, 0x9F0000
+
     xor eax, eax
     ;set A20
     mov al,0xD0 ;Read output port
@@ -371,23 +423,96 @@ Sld32Entry:
     pop eax
     or al, 2
     out 0x60, al
-    ;test
-    xor ax, ax
-    a:
-    call Sld32ClearScreen
-    inc ah
-    jnz a
+    ;move loaded files to their desired location
+    ;mov esi, FILESIZESTORAGE_SEGMENT
+    ;shl esi, 4
+    ;mov ecx, DWORD [es:esi]
+    ;push esi
+    ;mov esi, 0x80000 ;NULLKRNL.SYS @ 0x80000
+    ;mov edi, DST_KERNEL_ADDRESS ;NULLKRNL.SYS @ 0x80000 -> 0x100000
+    ;call CopyData
+
+    ;pop esi
+    ;add esi, 4
+    ;push esi
+    ;mov ecx, DWORD [es:esi]
+    ;mov esi, 0x60000 ;HAL.SYS @ 0x60000
+    ;mov edi, DST_HAL_ADDRESS ;HAL.SYS @ 0x60000 -> 0x1000000
+    ;call CopyData
+
+    ;verify kernel image and push entry point absolute address to stack
+    mov esi, init_krnl
+    call Sld32Print
+    
+    mov bx, WORD [DST_KERNEL_ADDRESS]
+    cmp bx, "MZ"
+    jne ErrorKernelCorrupt
+    inc BYTE [kcorruptval]
+    mov ebx, DWORD [DST_KERNEL_ADDRESS+60]
+    add ebx, DST_KERNEL_ADDRESS
+    mov eax, DWORD [ebx]
+    cmp eax, 0x00004550
+    jne ErrorKernelCorrupt
+    inc BYTE [kcorruptval]
+    add ebx, 4
+    mov ax, WORD [ebx]
+    cmp ax, 0x014C
+    jne ErrorKernelCorrupt
+    mov edx, ebx ;set EDX to the base of the section table
+    add edx, 0xF4 ;section table base = NT header base + NT header size (0xF8) and there's 4 added for some reason  
+    movzx ecx, WORD [ebx + 2] 
+    add ebx, 20 ;set EBX to base of optional header
+    inc BYTE [kcorruptval]
+    mov ax, WORD [ebx]
+    cmp ax, 0x10b
+    jne ErrorKernelCorrupt
+    inc BYTE [kcorruptval]
+    mov eax, DWORD [ebx + 16] ;move entry point address offet to EAX
+    jz ErrorKernelCorrupt
+    add eax, KERNEL_IMAGE_BASE ;offset from the image base,
+    push eax ;push it to the stack
+    xor eax, eax
+    mov esi, i_ValidKImage
+    call Sld32Print
+    ;find base of section table
+    ;address of section table = address of optional header + size of optional header
+    mov ebx, edx
+    ;set ECX to the ammount of sections
+    SectionLoadLoop:
+        push ecx
+        mov edi, [ebx + 12]
+        mov ecx, [ebx + 16]
+        mov esi, [ebx + 20]
+        add edi, KERNEL_IMAGE_BASE
+        add esi, DST_KERNEL_ADDRESS
+                mov edx, DWORD [ebx]
+        rep movsb
+        pop ecx
+        add ebx, 40
+        loop SectionLoadLoop
+    ;copy sections to their correct address, normally this is done via virtual memory
     xor ah, ah
     call Sld32ClearScreen
-
+    ;print boot menu
     mov esi, Gap
     call Sld32Print
     mov ah, 70h
     mov esi, WelcomeStr
     call Sld32Print
-
-    jmp 0x80000
-    ;halt!
+    ;/===============================\
+    ;|TODO: add functioning boot menu|
+    ;\===============================/  
+    xor ah, ah
+    call Sld32ClearScreen
+    ;execute kernel image
+    pop ebx
+    push ebp
+    mov ebp, esp
+    call ebx
+    cli
+    ;the kernel image returned! halt!
+    mov esi, e_KernelReturn
+    call Sld32Print
     cli
     hlt
 
@@ -401,8 +526,63 @@ SldWaitFor8043:
     popa
     ret
 
+CopyData:
+pusha
+    .DataCopyLoop:
+    mov dl, BYTE [es:esi]
+    mov BYTE [es:edi], dl
+    inc esi
+    inc edi
+    loop .DataCopyLoop
+    popa
+    ret
+
+ErrorKernelCorrupt:
+    xor eax, eax
+    movzx edx, BYTE [kcorruptval]
+    cmp edx, 1
+    je .NotPESig
+    cmp edx, 2
+    je .InvalidArch
+    cmp edx, 3
+    je .InvalidOHSig
+    cmp edx, 4
+    je .NoEntry
+    jne .Other
+    .NotMZSig:
+    mov esi, e_MzNotFound
+    jmp short .PrintAndHalt
+    .NotPESig:
+    mov esi, e_PeNotFound
+    jmp short .PrintAndHalt
+    .InvalidArch:
+    mov esi, e_KernelInvalidArch
+    jmp short .PrintAndHalt
+    .InvalidOHSig:
+    mov esi, e_InvalidOHSig
+    jmp short .PrintAndHalt
+    .NoEntry:
+    mov esi, e_NoEntry
+    jmp short .PrintAndHalt
+    .Other:
+    mov esi, e_Other
+    .PrintAndHalt:
+    call Sld32Print
+    Sld32Halt:
+    cli
+    hlt
+    jmp Sld32Halt
+
+kcorruptval db 0
+init_krnl db "Parsing NullKrnl PE headers",0xD, 0xA,0
 Gap db "                  ",0
 WelcomeStr db 178,178,178,177,177,177,176,176,176,"NoolOS-SOARELDR Boot Menu",176,176,176,177,177,177,178,178,178,0xA,0xD,0
 PreparingToLoadKernel db "SOARELDR is preparing to load kernel",0xA, 0xD, 0
-
-;KernelFilename db "NOOLKRNLSYS"
+e_MzNotFound db "MZ signature in DOS stub not found, kernel image corrupt, halting",0
+e_PeNotFound db "PE signature not found, kernel image corrupt, halting",0
+e_KernelInvalidArch db "Kernel architecture other then x86-32, kernel image invalid or corrupt, halting",0
+e_InvalidOHSig db "Unexpected optional header signature, kernel image invalid or corrupt, halting",0
+e_NoEntry db "No entry point specified, kernel image invalid or corrupt, halting", 0
+e_Other db "Unknown error while verifying kernel image, halted", 0
+e_KernelReturn db "Kernel image entry point returned, halted", 0
+i_ValidKImage db "Kernel image valid", 0
