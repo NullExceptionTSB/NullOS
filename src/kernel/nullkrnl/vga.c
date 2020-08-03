@@ -56,6 +56,7 @@ void VgaClearScreen(char character_attributes) {
     word wipechar = (character_attributes == 0 ? defaultAttributes : character_attributes) << 8;
     for (dword i = 0; i < COLUMNS * LINES; i++)
         screendata[i] = wipechar;
+    VgaSetCursorPos(0,0);
 }
 
 void VgaPrintChar(char character, char character_attributes) {

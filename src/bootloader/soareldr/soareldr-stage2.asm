@@ -423,6 +423,11 @@ Sld32Entry:
     pop eax
     or al, 2
     out 0x60, al
+    ;mask PICs
+    ;mov al, 0xFF
+    ;out 0x21, al
+    ;out 0xa1, al
+    
     ;move loaded files to their desired location
     ;mov esi, FILESIZESTORAGE_SEGMENT
     ;shl esi, 4

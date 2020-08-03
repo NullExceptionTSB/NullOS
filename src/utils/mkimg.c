@@ -3,30 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
-#pragma pack(1)
-typedef unsigned char byte;
-typedef struct _bios_parameter_block{
-    byte jumpcode[3];
-    char OEMlabel[8];
-    uint16_t bytesPerSector;
-    uint8_t sectorsPerCluster;
-    uint16_t reservedSectors;
-    uint8_t fatCount;
-    uint16_t rootDirectoryEntries;
-    uint16_t totalSectors;
-    uint8_t mediaDescriptorByte;
-    uint16_t sectorsPerFat;
-    uint16_t sectorsPerTrack;
-    uint16_t headCount;
-    uint32_t hiddenSectors;
-    uint32_t largeSectors;
-    uint8_t bootDriveNumber;
-    uint8_t reserved;
-    uint8_t signature;
-    uint32_t serialNumber;
-    char label[11];
-    char filesystem[8];
-}bios_parameter_block;
+#include "fat12.h"
 
 typedef enum _argflags {
     flag_input =        0x00000001,
@@ -101,7 +78,7 @@ parsedargs parse_args(char* argv[], int argc) {
 
 int main(int argc, char* argv[]) {
     parsedargs parsed_args = parse_args(argv, argc);
-    puts("mkimg by NullException");
+    puts("mkimg by NullException, created as part of SOARE/NullOS");
 
     unsigned int verbose = parsed_args.flags & flag_verbose;
     FILE* srcfile;
