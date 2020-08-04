@@ -5,7 +5,7 @@ todo list:
 - [x] Stage 1 FAT12 bootloader
 - [x] Stage 2 bootloader (SOARELDR)
 - [x] Hardware Abstraction Layer
-- [x] GTD and IDT abstraction
+- [x] GDT and IDT abstraction
 - [ ] Memory manager
 - [ ] Disk IO
 - [ ] PE Loader
