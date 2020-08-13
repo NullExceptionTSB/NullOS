@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#pragma pack(1)
+#pragma pack(push, 1)
 typedef unsigned char byte;
 typedef struct _bios_parameter_block{
     byte jumpcode[3];
@@ -24,3 +24,5 @@ typedef struct _bios_parameter_block{
     char label[11];
     char filesystem[8];
 }bios_parameter_block;
+#pragma pack(pop)
+#pragma 
