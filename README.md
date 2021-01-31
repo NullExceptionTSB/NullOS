@@ -6,11 +6,12 @@ roadmap:
 - [x] Stage 2 bootloader (SOARELDR)
 - [x] Hardware Abstraction Layer
 - [x] GDT and IDT abstraction
-- [ ] Memory manager
-- [ ] Disk IO
+- [ ] Memory manager <IN-PROGRESS>
+- [ ] Object manager
 - [ ] PE Loader
 - [ ] Convert HAL to be a module
 - [ ] Keyboard IO
+- [ ] Disk IO
 
 kind of memory map:\
 0x00100000 - Kernel image base address\
@@ -18,9 +19,9 @@ kind of memory map:\
 
 todo list:
 - [x] Rewrite MKIMG
-- [ ] Rewrite S1 Bootloader
-- [ ] Make a stage 1 for FAT16 and FAT32
-- [ ] Rewrite SOARELDR
+- [ ] Rewrite S1 Bootloader <IN-PROGRESS>
+- [ ] Make a stage 1 for FAT16 and FAT32 <IN-PROGRESS>
+- [ ] Rewrite SOARELDR <IN-PROGRESS>
 - [ ] Multiboot Support
 
 other info in wiki
