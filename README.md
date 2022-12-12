@@ -1,4 +1,6 @@
 # NullOS-SOARE
+
+**NOTE: THIS PROJECT IS DEAD IN FAVOR OF A NEW ONE**
 i do have half an idea of what i'm doing now
 
 roadmap: 
